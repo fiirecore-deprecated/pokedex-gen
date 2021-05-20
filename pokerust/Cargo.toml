@@ -1,0 +1,20 @@
+[package]
+name = "pokerust"
+version = "0.2.0"
+authors = ["lunik1 <lunik1@users.noreply.github.com>"]
+edition = "2018"
+description = "Pokeapi wrapper"
+documentation = "https://docs.rs/pokerust"
+homepage = "https://gitlab.com/lunik1/pokerust"
+repository = "https://gitlab.com/lunik1/pokerust"
+readme = "README.md"
+keywords = ["pokemon", "api", "rest", "pokeapi"]
+categories = ["api-bindings"]
+license = "BSD-3-Clause"
+include = ["Cargo.toml", "src/**/*.rs", "README.md", "LICENSE"]
+
+[dependencies]
+reqwest = { version = "0.11", features = ["json"] }
+async-trait = "0.1"
+serde = { version = "1.0", features = ["derive"] }
+lazy_static = "1.4"
