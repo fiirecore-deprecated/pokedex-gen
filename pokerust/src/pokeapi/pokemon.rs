@@ -3,14 +3,11 @@ use serde::{Deserialize, Serialize};
 use super::berries::*;
 use super::evolution::*;
 use super::games::*;
-use super::get_api_loc_from_url;
 use super::items::*;
 use super::locations::*;
 use super::moves::*;
 use super::resource_lists::*;
 use super::utility::*;
-
-use crate::cache::get_resource;
 use crate::{impl_id, impl_id_and_named, set_endpoint};
 
 /// <https://pokeapi.co/docs/v2.html#abilities>
@@ -213,9 +210,8 @@ pub struct Pokemon {
 
 impl Pokemon {
     /// Fetch list of `LocationAreaEncounters` from the API for this Pokemon.
-    pub async fn get_encounters(&self, client: &reqwest::Client) -> Result<Vec<LocationAreaEncounter>, reqwest::Error> {
-        let loc = get_api_loc_from_url(&self.location_area_encounters);
-        get_resource(client, loc).await?.json::<Vec<LocationAreaEncounter>>().await
+    pub async fn get_encounters(&self, client: &crate::Client) -> Result<Vec<LocationAreaEncounter>, reqwest::Error> {
+        client.get_api_loc(&self.location_area_encounters).await
     }
 }
 

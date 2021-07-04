@@ -67,15 +67,14 @@
 
 #![warn(clippy::all, clippy::pedantic, clippy::nursery)]
 
-use serde::de::DeserializeOwned;
-use async_trait::async_trait;
-use crate::cache::get_resource;
+use serde::{de::DeserializeOwned, Serialize};
 
 mod cache;
+mod client;
 mod pokeapi;
 mod util;
 
-pub use cache::ENDPOINT;
+pub use client::*;
 pub use pokeapi::berries::*;
 pub use pokeapi::contests::*;
 pub use pokeapi::encounters::*;
@@ -90,17 +89,11 @@ pub use pokeapi::resource_lists::*;
 pub use pokeapi::utility::*;
 
 /// Trait for API objects with an associated endpoint.
-#[async_trait]
+
 pub trait Endpoint {
-    type ResourceListKind;
+    type ResourceListKind: DeserializeOwned + Serialize;
 
     const ENDPOINT: &'static str;
-
-    /// Get a list of these API objects with the given offset and limit.
-    async fn list(client: &reqwest::Client, offset: usize, limit: usize) -> Result<Self::ResourceListKind, reqwest::Error>;
-
-    /// Get the complete list of these API objects.
-    async fn full_list(client: &reqwest::Client) -> Result<Self::ResourceListKind, reqwest::Error>;
 }
 
 /// Trait for API objects with a name.
@@ -113,38 +106,4 @@ pub trait Named {
 pub trait Id {
     /// Get the ID of this object.
     fn id(&self) -> i16;
-}
-
-/// API resources that can be retrived from an ID.
-#[async_trait]
-pub trait FromId: Id + Endpoint
-where
-    Self: Sized,
-{
-    /// Retrieve the API object of this type with this ID.
-    async fn from_id(client: &reqwest::Client, id: i16) -> Result<Self, reqwest::Error>;
-}
-
-#[async_trait]
-impl<T: Endpoint + Id + DeserializeOwned> FromId for T {
-    async fn from_id(client: &reqwest::Client, id: i16) -> Result<Self, reqwest::Error> {
-        get_resource(client, &format!("{}/{}/", T::ENDPOINT, id)).await?.json::<Self>().await
-    }
-}
-
-/// API resources that can be retrived from a name.
-#[async_trait]
-pub trait FromName: Named + Endpoint
-where
-    Self: Sized,
-{
-    /// Retrieve the API object of this type with this name.
-    async fn from_name(client: &reqwest::Client, id: &str) -> Result<Self, reqwest::Error>;
-}
-
-#[async_trait]
-impl<T: Endpoint + Named + DeserializeOwned> FromName for T {
-    async fn from_name(client: &reqwest::Client, id: &str) -> Result<Self, reqwest::Error> {
-        get_resource(client, &format!("{}/{}/", T::ENDPOINT, id)).await?.json::<Self>().await
-    }
 }

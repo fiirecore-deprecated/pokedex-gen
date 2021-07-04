@@ -1,5 +1,6 @@
 use std::path::Path;
 use std::sync::Arc;
+use log::info;
 use pokedex::pokemon::{
     Pokemon,
     data::{
@@ -11,7 +12,7 @@ use pokedex::pokemon::{
     },
     stat::StatSet,
 };
-use pokerust::{Id, FromId};
+use pokerust::Id;
 use tokio::io::AsyncWriteExt;
 
 use crate::capitalize_first;
@@ -28,7 +29,7 @@ const BACK: &str = "back";
 
 const ENTRY_PATH: &str = "pokedex/entries";
 
-pub async fn add_entries(client: Arc<reqwest::Client>) -> anyhow::Result<()> {
+pub async fn add_entries(client: Arc<pokerust::Client>) -> anyhow::Result<()> {
 
     let entry_path = Path::new(ENTRY_PATH);
     if !entry_path.exists() {
@@ -47,13 +48,13 @@ pub async fn add_entries(client: Arc<reqwest::Client>) -> anyhow::Result<()> {
 
 }
 
-async fn get_pokemon(index: i16, client: &reqwest::Client, entry_path: &Path) -> anyhow::Result<()> {
+async fn get_pokemon(index: i16, client: &pokerust::Client, entry_path: &Path) -> anyhow::Result<()> {
 
     // let before_move_check = start.elapsed().as_micros();
 
-    let mut pokemon = pokerust::Pokemon::from_id(client, index).await?;
+    let mut pokemon: pokerust::Pokemon = client.get(index).await?;
 
-    println!("Creating pokemon entry for: {}", &pokemon.name);
+    info!("Creating pokemon entry for: {}", &pokemon.name);
 
     let folder = entry_path.join(&pokemon.name);
 
@@ -97,7 +98,7 @@ async fn get_pokemon(index: i16, client: &reqwest::Client, entry_path: &Path) ->
     };
 
 
-    let species = pokerust::PokemonSpecies::from_id(client, pokemon.species.id()).await?;
+    let species: pokerust::PokemonSpecies = client.get(pokemon.species.id()).await?;
     let genus = &species.genera[7].genus;
     let genus = genus[0..genus.find(" ").unwrap_or(genus.len() - 1)].to_string();
 

@@ -1,5 +1,6 @@
 use anyhow::Result;
-use pokerust::{FromId, Id};
+use log::{error, info, warn};
+use pokerust::Id;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -19,7 +20,7 @@ const MOVES_SIZE: i16 = 559;
 
 const MOVES_PATH: &str = "pokedex/moves/";
 
-pub async fn add_moves(client: Arc<reqwest::Client>) -> Result<()> {
+pub async fn add_moves(client: Arc<pokerust::Client>) -> Result<()> {
     let path = Path::new(MOVES_PATH);
     if !path.exists() {
         tokio::fs::create_dir(&path).await?;
@@ -35,11 +36,11 @@ pub async fn add_moves(client: Arc<reqwest::Client>) -> Result<()> {
     Ok(())
 }
 
-async fn get_move(index: i16, client: &reqwest::Client, path: &Path) {
-    let mut move_ = pokerust::Move::from_id(client, index)
+async fn get_move(index: i16, client: &pokerust::Client, path: &Path) {
+    let mut move_ = client.get::<pokerust::Move, i16>(index)
         .await
         .unwrap_or_else(|err| {
-            eprintln!("Could not get move from id {} with error {}", index, err);
+            error!("Could not get move from id {} with error {}", index, err);
             panic!()
         });
 
@@ -53,7 +54,7 @@ async fn get_move(index: i16, client: &reqwest::Client, path: &Path) {
     crate::capitalize_first(&mut move_.type_.name);
     crate::capitalize_first(&mut move_.damage_class.name);
 
-    println!("Creating move entry for: {}", name);
+    info!("Creating move entry for: {}", name);
 
     tokio::fs::write(
         path.join(format!("{}.ron", name)),
@@ -81,14 +82,14 @@ async fn get_move(index: i16, client: &reqwest::Client, path: &Path) {
             ron::ser::PrettyConfig::default(),
         )
         .unwrap_or_else(|err| {
-            eprintln!("Could not serialize move {} with error {}", move_.name, err);
+            error!("Could not serialize move {} with error {}", move_.name, err);
             panic!()
         })
         .as_bytes(),
     )
     .await
     .unwrap_or_else(|err| {
-        eprintln!("Could not write move {} to file with error {}", move_.name, err);
+        error!("Could not write move {} to file with error {}", move_.name, err);
         panic!()
     });
 }
@@ -116,12 +117,11 @@ fn get_move_usage(move_: &pokerust::Move) -> Vec<MoveUseType> {
         // flinch check
 
         if metadata.flinch_chance != 0 {
-            let chance = metadata.flinch_chance as f32 / 100.0;
             let flinch = vec![MoveUseType::Flinch];
             usages.push(if metadata.flinch_chance == 100 {
                 MoveUseType::Flinch
             } else {
-                MoveUseType::Chance(flinch, chance)
+                MoveUseType::Chance(flinch, metadata.flinch_chance)
             });
         }
 
@@ -129,7 +129,7 @@ fn get_move_usage(move_: &pokerust::Move) -> Vec<MoveUseType> {
 
         if metadata.drain != 0 {
             if let Some(MoveUseType::Damage(kind)) = usages.get(0) {
-                usages[0] = MoveUseType::Drain(*kind, metadata.drain as f32 / 100.0);
+                usages[0] = MoveUseType::Drain(*kind, metadata.drain);
             }
         }
 
@@ -137,18 +137,20 @@ fn get_move_usage(move_: &pokerust::Move) -> Vec<MoveUseType> {
 
         if !matches!(metadata.ailment.id(), -1 | 0) {
 
-            if let Some((status, range)) = match metadata.ailment.id() {
-                1 => Some((Status::Paralysis, status_range(metadata.min_turns, metadata.max_turns))),
-                2 => Some((Status::Sleep, status_range(metadata.min_turns, metadata.max_turns))),
-                3 => Some((Status::Freeze, status_range(metadata.min_turns, metadata.max_turns))),
-                4 => Some((Status::Burn, status_range(metadata.min_turns, metadata.max_turns))),
-                5 => Some((Status::Poison, status_range(metadata.min_turns, metadata.max_turns))),
-                _ => None,
+            let range = status_range(metadata.min_turns, metadata.max_turns);
+
+            if let Some(status) = match metadata.ailment.id() {
+                1 => Some(Status::Paralysis),
+                2 => Some(Status::Sleep),
+                3 => Some(Status::Freeze),
+                4 => Some(Status::Burn),
+                5 => Some(Status::Poison),
+                id => {
+                    warn!("Could not get status #{}", id);
+                    None
+                },
             } {
-
-                let chance = metadata.ailment_chance as f32 / 100.0;
-                usages.push(MoveUseType::Status(status, range, chance));
-
+                usages.push(MoveUseType::Status(status, range, metadata.ailment_chance));
             }
 
         }
@@ -157,18 +159,15 @@ fn get_move_usage(move_: &pokerust::Move) -> Vec<MoveUseType> {
 
         if !move_.stat_changes.is_empty() {
 
-            let stat_chance = metadata.stat_chance;
-
             let stat_changes = move_
             .stat_changes
             .iter()
             .map(|stat| MoveUseType::StatStage(get_stat_type(stat.stat.id(), &move_.name), stat.change));
     
-            if matches!(stat_chance, 0 | 100) {
+            if matches!(metadata.stat_chance, 0 | 100) {
                 usages.extend(stat_changes);
             } else {
-                let chance = stat_chance as f32 / 100.0;
-                usages.push(MoveUseType::Chance(stat_changes.collect(), chance));
+                usages.push(MoveUseType::Chance(stat_changes.collect(), metadata.stat_chance));
             }
         }
     }
@@ -198,7 +197,7 @@ fn get_stat_type(id: i16, name: &str) -> BattleStatType {
         7 => BattleStatType::Accuracy,
         8 => BattleStatType::Evasion,
         id => {
-            eprintln!("Move {} has unknown battle stat type id {}", name, id);
+            error!("Move {} has unknown battle stat type id {}", name, id);
             panic!()
         },
     }

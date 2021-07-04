@@ -5,10 +5,8 @@ use crate::{impl_id_and_named, impl_named, set_endpoint, Id, Named};
 
 use super::encounters::*;
 use super::games::*;
-use super::get_api_loc_from_url;
 use super::machines::*;
 use super::resource_lists::*;
-use crate::cache::get_resource;
 
 use std::marker::PhantomData;
 
@@ -51,8 +49,8 @@ impl<T> APIResource<T>
 where
     T: DeserializeOwned,
 {
-    pub async fn get(&self, client: &reqwest::Client) -> Result<T, reqwest::Error> {
-        get_resource(client, get_api_loc_from_url(&self.url)).await?.json::<T>().await
+    pub async fn get(&self, client: &crate::Client) -> Result<T, reqwest::Error> {
+        client.get_api_loc(&self.url).await
     }
 }
 
@@ -153,8 +151,8 @@ impl<T> NamedAPIResource<T>
 where
     T: DeserializeOwned,
 {
-    pub async fn get(&self, client: &reqwest::Client) -> Result<T, reqwest::Error> {
-        get_resource(client, get_api_loc_from_url(&self.url)).await?.json::<T>().await
+    pub async fn get(&self, client: &crate::Client) -> Result<T, reqwest::Error> {
+        client.get_api_loc(&self.url).await
     }
 }
 

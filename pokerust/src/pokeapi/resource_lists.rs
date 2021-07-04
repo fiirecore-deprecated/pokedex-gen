@@ -1,11 +1,8 @@
+use async_trait::async_trait;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-use async_trait::async_trait;
 
-use super::get_api_loc_from_url;
 use super::utility::*;
-
-use crate::cache::get_resource;
 
 /// <https://pokeapi.co/docs/v2.html#un-named>
 //#[cfg_attr(debug_assertions, serde(deny_unknown_fields))]
@@ -39,10 +36,10 @@ where
     fn count(&self) -> &u64;
 
     /// Get the next list
-    async fn next_list(&self, client: &reqwest::Client) -> Result<Option<Self>, reqwest::Error>;
+    async fn next_list(&self, client: &crate::Client) -> Result<Option<Self>, reqwest::Error>;
 
     /// Get the previous list
-    async fn previous_list(&self, client: &reqwest::Client) -> Result<Option<Self>, reqwest::Error>;
+    async fn previous_list(&self, client: &crate::Client) -> Result<Option<Self>, reqwest::Error>;
 }
 
 // impl<T> List for NamedAPIResourceList<T>
@@ -83,18 +80,18 @@ where
         &self.count
     }
 
-    async fn next_list(&self, client: &reqwest::Client) -> Result<Option<Self>, reqwest::Error> {
+    async fn next_list(&self, client: &crate::Client) -> Result<Option<Self>, reqwest::Error> {
         if let Some(loc) = &self.next {
-            let list = get_resource(client, get_api_loc_from_url(&loc)).await?.json::<Self>().await?;
+            let list = client.get_api_loc(loc).await?;
             Ok(Some(list))
         } else {
             Ok(None)
         }
     }
 
-    async fn previous_list(&self, client: &reqwest::Client) -> Result<Option<Self>, reqwest::Error> {
+    async fn previous_list(&self, client: &crate::Client) -> Result<Option<Self>, reqwest::Error> {
         if let Some(loc) = &self.next {
-            let list = get_resource(client, get_api_loc_from_url(&loc)).await?.json::<Self>().await?;
+            let list = client.get_api_loc(loc).await?;
             Ok(Some(list))
         } else {
             Ok(None)

@@ -4,10 +4,11 @@ extern crate firecore_pokedex as pokedex;
 use std::path::Path;
 use std::sync::Arc;
 
+use log::info;
 use pokedex::types::PokemonType;
 use tokio::task;
 
-mod entries;
+mod pokemon;
 mod images;
 mod moves;
 
@@ -16,15 +17,7 @@ mod moves;
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
 
-    /*
-    let args: Vec<String> = std::env::args().collect();
-    let mut opts = getopts::Options::new();
-    opts.optflag("m", "no-moves", "Disable move generation");
-    let matches = match opts.parse(&args[1..]) {
-        Ok(m) => {m}
-        Err(err) => {panic!("{}", err)}
-    };
-    */
+    simple_logger::SimpleLogger::new().with_level(log::LevelFilter::Info).init()?;
 
     let start = tokio::time::Instant::now();
 
@@ -34,23 +27,23 @@ async fn main() -> anyhow::Result<()> {
         tokio::fs::create_dir(path).await?;
     }
 
-    let client = Arc::new(reqwest::Client::builder().build()?);
+    let client = Arc::new(pokerust::Client::default());
     let client_ = client.clone();
 
-    let entries_task = task::spawn(async move {
-        entries::add_entries(client_).await.unwrap();
+    let pokemon_task = task::spawn(async move {
+        pokemon::add_entries(client_).await.unwrap();
     });    
     
     let moves_task = task::spawn(async move {
         moves::add_moves(client).await.unwrap();
     });
 
-    entries_task.await?;
+    pokemon_task.await?;
     moves_task.await?;
 
     let elapsed = start.elapsed().as_millis() as f64 / 1000.0;
     
-    println!("Finished in {} seconds!", elapsed);
+    info!("Finished in {} seconds!", elapsed);
 
     Ok(())
 }

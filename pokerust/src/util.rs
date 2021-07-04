@@ -9,14 +9,6 @@ impl crate::Endpoint for $A {
     type ResourceListKind = $B<$A>;
 
     const ENDPOINT: &'static str = $C;
-
-    async fn list(client: &reqwest::Client, offset: usize, limit: usize) -> Result<Self::ResourceListKind, ::reqwest::Error> {
-        crate::cache::get_resource(client, &format!("{}/?offset={}&limit={}", Self::ENDPOINT, offset, limit)).await?.json::<Self::ResourceListKind>().await
-    }
-
-    async fn full_list(client: &reqwest::Client) -> Result<Self::ResourceListKind, ::reqwest::Error> {
-        crate::cache::get_resource(client, &format!("{}/?offset=0&limit=9999", Self::ENDPOINT)).await?.json::<Self::ResourceListKind>().await
-    }
 }
 };
 }

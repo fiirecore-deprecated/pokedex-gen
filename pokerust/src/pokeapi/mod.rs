@@ -17,7 +17,7 @@ trait FromId {
 
 /// Gets the location of an API resource from a full url, minus the url
 /// and common prefix, e.g. "https://pokeapi.co/api/v2/"
-fn get_api_loc_from_url(url: &str) -> &str {
+pub(crate) fn get_api_loc_from_url(url: &str) -> &str {
     let pre = "api/v2/";
     &url[(url.rfind(pre).unwrap() + pre.len())..]
 }
