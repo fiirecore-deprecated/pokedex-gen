@@ -8,11 +8,9 @@ use pokedex::{
     moves::{
         target::MoveTarget,
         usage::{DamageKind, MoveUseType},
-        Move, MoveCategory,
+        FieldMoveId, Move, MoveCategory,
     },
-    pokemon::{
-        stat::{BattleStatType, StatType},
-    },
+    pokemon::stat::{BattleStatType, StatType},
     status::{Status, StatusRange},
 };
 
@@ -37,7 +35,8 @@ pub async fn add_moves(client: Arc<pokerust::Client>) -> Result<()> {
 }
 
 async fn get_move(index: i16, client: &pokerust::Client, path: &Path) {
-    let mut move_ = client.get::<pokerust::Move, i16>(index)
+    let mut move_ = client
+        .get::<pokerust::Move, i16>(index)
         .await
         .unwrap_or_else(|err| {
             error!("Could not get move from id {} with error {}", index, err);
@@ -76,7 +75,7 @@ async fn get_move(index: i16, client: &pokerust::Client, path: &Path) {
                     .as_ref()
                     .map(|meta| meta.crit_rate)
                     .unwrap_or_default(),
-                field_id: None,
+                field_id: get_move_field_id(&move_),
                 usage: get_move_usage(&move_),
             },
             ron::ser::PrettyConfig::default(),
@@ -89,7 +88,10 @@ async fn get_move(index: i16, client: &pokerust::Client, path: &Path) {
     )
     .await
     .unwrap_or_else(|err| {
-        error!("Could not write move {} to file with error {}", move_.name, err);
+        error!(
+            "Could not write move {} to file with error {}",
+            move_.name, err
+        );
         panic!()
     });
 }
@@ -113,7 +115,6 @@ fn get_move_usage(move_: &pokerust::Move) -> Vec<MoveUseType> {
     // metadata
 
     if let Some(metadata) = move_.meta.as_ref() {
-
         // flinch check
 
         if metadata.flinch_chance != 0 {
@@ -136,7 +137,6 @@ fn get_move_usage(move_: &pokerust::Move) -> Vec<MoveUseType> {
         // status effect check
 
         if !matches!(metadata.ailment.id(), -1 | 0) {
-
             let range = status_range(metadata.min_turns, metadata.max_turns);
 
             if let Some(status) = match metadata.ailment.id() {
@@ -148,26 +148,26 @@ fn get_move_usage(move_: &pokerust::Move) -> Vec<MoveUseType> {
                 id => {
                     warn!("Could not get status #{}", id);
                     None
-                },
+                }
             } {
                 usages.push(MoveUseType::Status(status, range, metadata.ailment_chance));
             }
-
         }
 
         // stat stage check
 
         if !move_.stat_changes.is_empty() {
+            let stat_changes = move_.stat_changes.iter().map(|stat| {
+                MoveUseType::StatStage(get_stat_type(stat.stat.id(), &move_.name), stat.change)
+            });
 
-            let stat_changes = move_
-            .stat_changes
-            .iter()
-            .map(|stat| MoveUseType::StatStage(get_stat_type(stat.stat.id(), &move_.name), stat.change));
-    
             if matches!(metadata.stat_chance, 0 | 100) {
                 usages.extend(stat_changes);
             } else {
-                usages.push(MoveUseType::Chance(stat_changes.collect(), metadata.stat_chance));
+                usages.push(MoveUseType::Chance(
+                    stat_changes.collect(),
+                    metadata.stat_chance,
+                ));
             }
         }
     }
@@ -177,6 +177,18 @@ fn get_move_usage(move_: &pokerust::Move) -> Vec<MoveUseType> {
     }
 
     usages
+}
+
+fn get_move_field_id(move_: &pokerust::Move) -> Option<FieldMoveId> {
+    match move_.id {
+        15 => Some("cut".parse().unwrap()),
+        19 => Some("fly".parse().unwrap()),
+        57 => Some("surf".parse().unwrap()),
+        70 => Some("stre".parse().unwrap()),
+        127 => Some("wfll".parse().unwrap()),
+        249 => Some("rsms".parse().unwrap()),
+        _ => None,
+    }
 }
 
 fn status_range(min_turns: Option<u8>, max_turns: Option<u8>) -> StatusRange {
@@ -199,7 +211,7 @@ fn get_stat_type(id: i16, name: &str) -> BattleStatType {
         id => {
             error!("Move {} has unknown battle stat type id {}", name, id);
             panic!()
-        },
+        }
     }
 }
 
