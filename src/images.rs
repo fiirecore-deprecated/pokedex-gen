@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+use anyhow::Result;
 use image::DynamicImage;
 use image::GenericImageView;
 use image::Pixel;
@@ -5,17 +7,17 @@ use tokio::task::block_in_place;
 
 pub struct ImageWriter;
 
-impl<'a> ImageWriter {
+impl ImageWriter {
 
-    pub async fn download(game_id: &'a str, pokemon: &'a str, side: &'a str, side_url: &'a str) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn download(folder: &PathBuf, game_id: &str, pokemon: &str, side: &str, side_url: &str) -> Result<()> {
         let response = reqwest::get(&format!("https://img.pokemondb.net/sprites/{}/{}/{}.png", game_id, side_url, pokemon)).await?;
-        let bytes = response.bytes().await?;
+        let bytes = response.bytes().await?.to_vec();
         block_in_place(move || {
-            let mut image = image::load_from_memory_with_format(&*bytes, image::ImageFormat::Png).unwrap();
+            let mut image = image::load_from_memory_with_format(&bytes, image::ImageFormat::Png).unwrap();
             let (top, bottom) = get_heights(&image);
             image = image.crop(0, top, image.width(), bottom - top + 1);
-            image.save(format!("pokedex/textures/normal/{}/{}.png", side, pokemon)).unwrap();
-        });        
+            image.save(folder.join(format!("normal_{}.png", side))).unwrap();
+        });
         Ok(())
     }
 

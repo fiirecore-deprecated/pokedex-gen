@@ -1,19 +1,20 @@
+extern crate firecore_pokedex as pokedex;
 // #![feature(exclusive_range_pattern)]
 
 use std::path::Path;
 use std::sync::Arc;
 
-use firecore_pokedex::pokemon::types::PokemonType;
+use pokedex::types::PokemonType;
 use tokio::task;
 
 mod entries;
 mod images;
 mod moves;
 
-pub(crate) const EXTENSION: &str = "ron";
+// pub(crate) const EXTENSION: &str = "ron";
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> anyhow::Result<()> {
 
     /*
     let args: Vec<String> = std::env::args().collect();
@@ -61,26 +62,26 @@ pub(crate) fn capitalize_first(string: &mut String) {
 
 
 
-pub(crate) fn type_from_string(string: &str) -> PokemonType {
-    match string[..3].to_ascii_lowercase().as_str() {
-        "nor" => PokemonType::Normal,
-        "fir" => PokemonType::Fire,
-        "wat" => PokemonType::Water,
-        "ele" => PokemonType::Electric,
-        "gra" => PokemonType::Grass,
-        "ice" => PokemonType::Ice,
-        "fig" => PokemonType::Fighting,
-        "poi" => PokemonType::Poison,
-        "gro" => PokemonType::Ground,
-        "fly" => PokemonType::Flying,
-        "psy" => PokemonType::Psychic,
-        "bug" => PokemonType::Bug,
-        "roc" => PokemonType::Rock,
-        "gho" => PokemonType::Ghost,
-        "dra" => PokemonType::Dragon,
-        "dar" => PokemonType::Dark,
-        "ste" => PokemonType::Steel,
-        "fai" => PokemonType::Fairy,
-        _ => panic!("Could not get pokemon type from string \"{}\"", string),
+pub(crate) fn type_from_id(id: i16) -> PokemonType {
+    match id {
+        1 => PokemonType::Normal,
+        10 => PokemonType::Fire,
+        11 => PokemonType::Water,
+        13 => PokemonType::Electric,
+        12 => PokemonType::Grass,
+        15 => PokemonType::Ice,
+        2 => PokemonType::Fighting,
+        4 => PokemonType::Poison,
+        5 => PokemonType::Ground,
+        3 => PokemonType::Flying,
+        14 => PokemonType::Psychic,
+        7 => PokemonType::Bug,
+        6 => PokemonType::Rock,
+        8 => PokemonType::Ghost,
+        16 => PokemonType::Dragon,
+        17 => PokemonType::Dark,
+        9 => PokemonType::Steel,
+        18 => PokemonType::Fairy,
+        _ => panic!("Could not get pokemon type from id \"{}\"", id),
     }
 }

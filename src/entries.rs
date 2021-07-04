@@ -1,14 +1,17 @@
 use std::path::Path;
 use std::sync::Arc;
-use firecore_pokedex::pokemon::Pokemon;
-use firecore_pokedex::pokemon::data::LearnableMove;
-use firecore_pokedex::pokemon::data::PokedexData;
-use firecore_pokedex::pokemon::data::training::GrowthRate;
-use firecore_pokedex::pokemon::data::training::Training;
-use firecore_pokedex::pokemon::stat::StatSet;
-use firecore_pokedex::pokemon::data::breeding::Breeding;
-use pokerust::Id;
-use pokerust::FromId;
+use pokedex::pokemon::{
+    Pokemon,
+    data::{
+        LearnableMove,
+        PokedexData,
+        GrowthRate,
+        Training,
+        Breeding,
+    },
+    stat::StatSet,
+};
+use pokerust::{Id, FromId};
 use tokio::io::AsyncWriteExt;
 
 use crate::capitalize_first;
@@ -25,18 +28,11 @@ const BACK: &str = "back";
 
 const ENTRY_PATH: &str = "pokedex/entries";
 
-pub async fn add_entries(client: Arc<reqwest::Client>) -> Result<(), Box<dyn std::error::Error>> {
-
-    let texture_path = Path::new("pokedex/textures");
+pub async fn add_entries(client: Arc<reqwest::Client>) -> anyhow::Result<()> {
 
     let entry_path = Path::new(ENTRY_PATH);
     if !entry_path.exists() {
         tokio::fs::create_dir(entry_path).await?;
-    }
-
-    if !texture_path.exists() {
-        tokio::fs::create_dir_all(texture_path.join("normal/back")).await?;
-        tokio::fs::create_dir_all(texture_path.join("normal/front")).await?;
     }
 
     for index in 1..DEX_SIZE {
@@ -51,21 +47,51 @@ pub async fn add_entries(client: Arc<reqwest::Client>) -> Result<(), Box<dyn std
 
 }
 
-async fn get_pokemon(index: i16, client: &reqwest::Client, entry_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+async fn get_pokemon(index: i16, client: &reqwest::Client, entry_path: &Path) -> anyhow::Result<()> {
 
     // let before_move_check = start.elapsed().as_micros();
 
-    let pokemon = pokerust::Pokemon::from_id(client, index).await?;
+    let mut pokemon = pokerust::Pokemon::from_id(client, index).await?;
+
+    println!("Creating pokemon entry for: {}", &pokemon.name);
+
+    let folder = entry_path.join(&pokemon.name);
+
+    if !folder.exists() {
+        tokio::fs::create_dir_all(&folder).await?;
+    }
+
+    let folder_ = folder.clone();
+    let name_ = Arc::new(pokemon.name.clone());
+    let index_ = index;
+
+    if index_ < 152 {
+
+        let name = name_.clone();
+        let folder = folder_.clone();
+        tokio::spawn(async move { ImageWriter::download(&folder, IMG_PATH1, name.as_ref(), FRONT, FRONT_URL).await });
+
+        let name = name_.clone();
+        let folder = folder_.clone();
+        tokio::spawn(async move { ImageWriter::download(&folder, IMG_PATH1, name.as_ref(), BACK, BACK_URL).await });
+    } else {
+
+        let name = name_.clone();
+        let folder = folder_.clone();
+        tokio::spawn(async move { ImageWriter::download(&folder, IMG_PATH2, name.as_ref(), FRONT, FRONT_URL).await });
+
+        let name = name_;
+        let folder = folder_;
+        tokio::spawn(async move { ImageWriter::download(&folder, IMG_PATH2, name.as_ref(), BACK, BACK_URL).await });
+    }
     
     // let after_move_check = start.elapsed().as_micros();
 
-    let mut name = pokemon.name.clone();
+    capitalize_first(&mut pokemon.name);
 
-    capitalize_first(&mut name);
-
-    let primary_type = crate::type_from_string(&pokemon.types[0].type_.name);
+    let primary_type = crate::type_from_id(pokemon.types[0].type_.id());
     let secondary_type = if pokemon.types.len() == 2 {
-        Some(crate::type_from_string(&pokemon.types[1].type_.name))
+        Some(crate::type_from_id(pokemon.types[1].type_.id()))
     } else {
         None
     };
@@ -85,35 +111,27 @@ async fn get_pokemon(index: i16, client: &reqwest::Client, entry_path: &Path) ->
         for version in &pmove.version_group_details {
             if version.version_group.name.starts_with("f") && version.level_learned_at != 0  {
                 moves.push(LearnableMove {
-                    move_id: pmove.move_.name.parse().expect("Could not parse learnable move id!"),
+                    id: pmove.move_.name.parse().expect("Could not parse learnable move id!"),
                     level: version.level_learned_at,
                 });
             }
         }
     }
 
-    println!("Creating pokemon entry for: {}", &name);
-
-    let folder = entry_path.join(&name);
-
-    if !folder.exists() {
-        tokio::fs::create_dir_all(&folder).await?;
-    }
-
-    let mut file = tokio::fs::File::create(folder.join(name.clone() + "." + crate::EXTENSION)).await?;
+    let mut file = tokio::fs::File::create(folder.join("pokemon.ron")).await?;
     file.write_all(ron::ser::to_string_pretty(&Pokemon {
+        id: pokemon.id as u16,
+        name: pokemon.name,
+        primary_type,
+        secondary_type,
         data: PokedexData {
-            id: pokemon.id as u16,
-            name: name,
-            primary_type,
-            secondary_type,
             species: genus,
             height: pokemon.height,
             weight: pokemon.weight,
         },
         training: Training {
             base_exp: pokemon.base_experience,
-            growth_rate: growth_rate_from_string(&species.growth_rate.name),
+            growth_rate: growth_rate_from_id(species.growth_rate.id()),
         },
         base: StatSet {
             hp: stats[0].base_stat,
@@ -131,58 +149,19 @@ async fn get_pokemon(index: i16, client: &reqwest::Client, entry_path: &Path) ->
         },
         moves,
     }, ron::ser::PrettyConfig::default())?.as_bytes()).await?;
-    
-
-    if index < 152 {
-        ImageWriter::download(IMG_PATH1, &pokemon.name, FRONT, FRONT_URL).await?;
-        ImageWriter::download(IMG_PATH1, &pokemon.name, BACK, BACK_URL).await?;
-    } else {
-        ImageWriter::download(IMG_PATH2, &pokemon.name, FRONT, FRONT_URL).await?;
-        ImageWriter::download(IMG_PATH2, &pokemon.name, BACK, BACK_URL).await?;
-    }
 
     Ok(())
 
 }
 
-pub fn growth_rate_from_string(string: &str) -> GrowthRate {
-    match string {
-        "slow" => GrowthRate::Slow,
-        "fast" => GrowthRate::Fast,
-        "medium" => GrowthRate::Medium,
-        "medium-slow" => GrowthRate::MediumSlow,
-        "fast-then-very-slow" => GrowthRate::FastThenVerySlow,
-        "slow-then-very-fast" => GrowthRate::SlowThenVeryFast,
-        _ => panic!("Could not get growth rate from string \"{}\"", string)
+pub fn growth_rate_from_id(id: i16) -> GrowthRate {
+    match id {
+        1 => GrowthRate::Slow,
+        2 => GrowthRate::Medium,
+        3 => GrowthRate::Fast,
+        4 => GrowthRate::MediumSlow,
+        6 => GrowthRate::FastThenVerySlow,
+        5 => GrowthRate::SlowThenVeryFast,
+        _ => panic!("Could not get growth rate from id \"{}\"", id)
     }
 }
-
-// #[derive(Serialize)]
-// pub struct PokemonToml<'a> {
-
-//     data: PokedexData<'a>,
-//     training: Training<'a>,
-//     base: StatSet,
-//     breeding: Breeding,
-//     moves: Vec<LearnableMove>,
-
-// }
-
-// #[derive(Serialize)]
-// struct PokedexData<'a> {
-
-//     number: &'a i16,
-//     name: &'a String,
-//     primary_type: String,
-//     secondary_type: Option<String>,
-//     species: &'a str,
-//     height: &'a u8,
-//     weight: &'a u16,
-
-// }
-
-// #[derive(Serialize)]
-// pub struct Training<'a> {
-//     base_exp: u16,
-//     growth_rate: &'a String,
-// }
