@@ -71,7 +71,7 @@ async fn get_pokemon(
 
     info!("Creating pokemon entry for: {}", name);
 
-    let client_folder = client_path.join(&name);
+    let client_folder = client_path.join(index.to_string());
 
     if !client_folder.exists() {
         tokio::fs::create_dir_all(&client_folder).await?;
@@ -114,7 +114,7 @@ async fn get_pokemon(
 
         let name = name_.clone();
         let client_folder = client_folder_.clone();
-        tokio::spawn(async move { cry::get_cry(&client_folder, &name).await.unwrap_or_else(|err| panic!("Could not get cry with error {}", err)); });
+        tokio::spawn(async move { cry::get_cry(&client_folder, &name).await });
 
     }
 
