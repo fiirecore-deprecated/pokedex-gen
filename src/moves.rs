@@ -4,37 +4,44 @@ use pokerust::Id;
 use std::path::Path;
 use std::sync::Arc;
 
-use pokedex::{
-    moves::{
-        target::MoveTarget,
-        usage::{DamageKind, MoveUseType},
-        FieldMoveId, Move, MoveCategory,
+use battle::{
+    moves::usage::{DamageKind, MoveAction, MoveExecution, MoveUsage},
+    pokedex::{
+        ailment::{Ailment, AilmentLength},
+        moves::{Move, MoveCategory, MoveTarget},
+        pokemon::stat::StatType,
     },
-    pokemon::stat::{BattleStatType, StatType},
-    status::{Status, StatusRange},
+    pokemon::battle::stat::BattleStatType,
 };
 
 const MOVES_SIZE: i16 = 559;
 
 const MOVES_PATH: &str = "pokedex/moves/";
+const BATTLE_PATH: &str = "pokedex/battle/";
+const SCRIPT_PATH: &str = "pokedex/battle/scripts";
 
 pub async fn add_moves(client: Arc<pokerust::Client>) -> Result<()> {
     let path = Path::new(MOVES_PATH);
     if !path.exists() {
-        tokio::fs::create_dir(&path).await?;
+        tokio::fs::create_dir_all(&path).await?;
+    }
+
+    let path = Path::new(SCRIPT_PATH);
+    if !path.exists() {
+        tokio::fs::create_dir_all(&path).await?;
     }
 
     for index in 1..MOVES_SIZE {
         let client = client.clone();
         tokio::task::spawn(async move {
-            get_move(index, client.as_ref(), &path).await;
+            get_move(index, client.as_ref()).await;
         });
     }
 
     Ok(())
 }
 
-async fn get_move(index: i16, client: &pokerust::Client, path: &Path) {
+async fn get_move(index: i16, client: &pokerust::Client) {
     let mut move_ = client
         .get::<pokerust::Move, i16>(index)
         .await
@@ -56,7 +63,38 @@ async fn get_move(index: i16, client: &pokerust::Client, path: &Path) {
     info!("Creating move entry for: {}", name);
 
     tokio::fs::write(
-        path.join(format!("{}.ron", name)),
+        format!("{}{}.ron", BATTLE_PATH, name),
+        ron::ser::to_string_pretty(
+            &(
+                id,
+                MoveUsage {
+                    execute: get_move_usage(&move_),
+                    contact: false,
+                    crit_rate: move_
+                        .meta
+                        .as_ref()
+                        .map(|meta| meta.crit_rate)
+                        .unwrap_or_default(),
+                }
+            ),
+            Default::default(),
+        )
+        .unwrap_or_else(|err| {
+            error!("Could not serialize move usage for {} with error {}", move_.name, err);
+            panic!()
+        })
+    )
+    .await
+    .unwrap_or_else(|err| {
+        error!(
+            "Could not write move usage for {} to file with error {}",
+            move_.name, err
+        );
+        panic!()
+    });
+
+    tokio::fs::write(
+        format!("{}{}.ron", MOVES_PATH, name),
         ron::ser::to_string_pretty(
             &Move {
                 id,
@@ -66,25 +104,18 @@ async fn get_move(index: i16, client: &pokerust::Client, path: &Path) {
                 name,
                 category: category_from_id(move_.damage_class.id()),
                 pokemon_type: crate::type_from_id(move_.type_.id()),
+                power: move_.power,
                 accuracy: move_.accuracy,
-                target: target_from_id(move_.target.id()),
                 priority: move_.priority,
-                contact: false,
-                crit_rate: move_
-                    .meta
-                    .as_ref()
-                    .map(|meta| meta.crit_rate)
-                    .unwrap_or_default(),
-                field_id: get_move_field_id(&move_),
-                usage: get_move_usage(&move_),
+                target: target_from_id(move_.target.id()),
+                world: is_world_move(&move_),
             },
-            ron::ser::PrettyConfig::default(),
+            Default::default(),
         )
         .unwrap_or_else(|err| {
             error!("Could not serialize move {} with error {}", move_.name, err);
             panic!()
         })
-        .as_bytes(),
     )
     .await
     .unwrap_or_else(|err| {
@@ -105,11 +136,24 @@ fn category_from_id(id: i16) -> MoveCategory {
     }
 }
 
-fn get_move_usage(move_: &pokerust::Move) -> Vec<MoveUseType> {
+fn get_move_usage(move_: &pokerust::Move) -> MoveExecution {
+    match move_.name.as_str() {
+        "false-swipe" => MoveExecution::Script(move_.name.parse().unwrap()),
+        _ => {
+            let actions = get_move_actions(move_);
+            match actions.is_empty() {
+                true => MoveExecution::None,
+                false => MoveExecution::Actions(actions),
+            }
+        }
+    }
+}
+
+fn get_move_actions(move_: &pokerust::Move) -> Vec<MoveAction> {
     let mut usages = Vec::with_capacity(1);
 
     if let Some(power) = move_.power {
-        usages.push(MoveUseType::Damage(DamageKind::Power(power)))
+        usages.push(MoveAction::Damage(DamageKind::Power(power)))
     }
 
     // metadata
@@ -118,19 +162,19 @@ fn get_move_usage(move_: &pokerust::Move) -> Vec<MoveUseType> {
         // flinch check
 
         if metadata.flinch_chance != 0 {
-            let flinch = vec![MoveUseType::Flinch];
+            let flinch = vec![MoveAction::Flinch];
             usages.push(if metadata.flinch_chance == 100 {
-                MoveUseType::Flinch
+                MoveAction::Flinch
             } else {
-                MoveUseType::Chance(flinch, metadata.flinch_chance)
+                MoveAction::Chance(flinch, metadata.flinch_chance)
             });
         }
 
         // drain check
 
         if metadata.drain != 0 {
-            if let Some(MoveUseType::Damage(kind)) = usages.get(0) {
-                usages[0] = MoveUseType::Drain(*kind, metadata.drain);
+            if let Some(MoveAction::Damage(kind)) = usages.get(0) {
+                usages[0] = MoveAction::Drain(*kind, metadata.drain);
             }
         }
 
@@ -139,18 +183,18 @@ fn get_move_usage(move_: &pokerust::Move) -> Vec<MoveUseType> {
         if !matches!(metadata.ailment.id(), -1 | 0) {
             let range = status_range(metadata.min_turns, metadata.max_turns);
 
-            if let Some(status) = match metadata.ailment.id() {
-                1 => Some(Status::Paralysis),
-                2 => Some(Status::Sleep),
-                3 => Some(Status::Freeze),
-                4 => Some(Status::Burn),
-                5 => Some(Status::Poison),
+            if let Some(ailment) = match metadata.ailment.id() {
+                1 => Some(Ailment::Paralysis),
+                2 => Some(Ailment::Sleep),
+                3 => Some(Ailment::Freeze),
+                4 => Some(Ailment::Burn),
+                5 => Some(Ailment::Poison),
                 id => {
-                    warn!("Could not get status #{}", id);
+                    warn!("Could not get ailment #{}", id);
                     None
                 }
             } {
-                usages.push(MoveUseType::Status(status, range, metadata.ailment_chance));
+                usages.push(MoveAction::Ailment(ailment, range, metadata.ailment_chance));
             }
         }
 
@@ -158,13 +202,13 @@ fn get_move_usage(move_: &pokerust::Move) -> Vec<MoveUseType> {
 
         if !move_.stat_changes.is_empty() {
             let stat_changes = move_.stat_changes.iter().map(|stat| {
-                MoveUseType::StatStage(get_stat_type(stat.stat.id(), &move_.name), stat.change)
+                MoveAction::Stat(get_stat_type(stat.stat.id(), &move_.name), stat.change)
             });
 
             if matches!(metadata.stat_chance, 0 | 100) {
                 usages.extend(stat_changes);
             } else {
-                usages.push(MoveUseType::Chance(
+                usages.push(MoveAction::Chance(
                     stat_changes.collect(),
                     metadata.stat_chance,
                 ));
@@ -172,29 +216,25 @@ fn get_move_usage(move_: &pokerust::Move) -> Vec<MoveUseType> {
         }
     }
 
-    if usages.is_empty() {
-        usages.push(MoveUseType::Todo)
-    }
+    // if usages.is_empty() {
+    //     usages.push(MoveAction::Todo)
+    // }
 
     usages
 }
 
-fn get_move_field_id(move_: &pokerust::Move) -> Option<FieldMoveId> {
+/// 15 = Cut, 19 = Fly, 57 = Surf, 70 = Strength, 127 = Waterfall, 249 = Rock Smash
+fn is_world_move(move_: &pokerust::Move) -> bool {
     match move_.id {
-        15 => Some("cut".parse().unwrap()),
-        19 => Some("fly".parse().unwrap()),
-        57 => Some("surf".parse().unwrap()),
-        70 => Some("stre".parse().unwrap()),
-        127 => Some("wfll".parse().unwrap()),
-        249 => Some("rsms".parse().unwrap()),
-        _ => None,
+        15 | 19 | 57 | 70 | 127 | 249 => true,
+        _ => false,
     }
 }
 
-fn status_range(min_turns: Option<u8>, max_turns: Option<u8>) -> StatusRange {
+fn status_range(min_turns: Option<u8>, max_turns: Option<u8>) -> AilmentLength {
     match min_turns.zip(max_turns) {
-        Some((min, max)) => StatusRange::Temporary(min, max),
-        None => StatusRange::Permanent,
+        Some((min, max)) => AilmentLength::Temporary(min, max),
+        None => AilmentLength::Permanent,
     }
 }
 
@@ -227,6 +267,6 @@ fn target_from_id(target: i16) -> MoveTarget {
         // 13 => MoveTarget::UserOrAllies,
         7 => MoveTarget::User,
         14 => MoveTarget::AllPokemon,
-        _ => MoveTarget::Todo,
+        _ => MoveTarget::None,
     }
 }

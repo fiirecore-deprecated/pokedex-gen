@@ -1,15 +1,14 @@
-extern crate firecore_pokedex as pokedex;
+extern crate firecore_battle as battle;
 // #![feature(exclusive_range_pattern)]
 
 use std::path::Path;
 use std::sync::Arc;
 
 use log::info;
-use pokedex::types::PokemonType;
+use battle::pokedex::types::PokemonType;
 use tokio::task;
 
 mod pokemon;
-mod images;
 mod moves;
 
 // pub(crate) const EXTENSION: &str = "ron";
@@ -31,7 +30,7 @@ async fn main() -> anyhow::Result<()> {
     let client_ = client.clone();
 
     let pokemon_task = task::spawn(async move {
-        pokemon::add_entries(client_).await.unwrap();
+        pokemon::add_pokemon(client_).await.unwrap();
     });    
     
     let moves_task = task::spawn(async move {
