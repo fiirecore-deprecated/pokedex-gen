@@ -5,7 +5,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use battle::{
-    moves::usage::{DamageKind, MoveAction, MoveExecution, MoveUsage},
+    moves::{damage::DamageKind, MoveUse, MoveExecution},
     pokedex::{
         ailment::{Ailment, AilmentLength},
         moves::{Move, MoveCategory, MoveTarget},
@@ -67,15 +67,7 @@ async fn get_move(index: i16, client: &pokerust::Client) {
         ron::ser::to_string_pretty(
             &(
                 id,
-                MoveUsage {
-                    execute: get_move_usage(&move_),
-                    contact: false,
-                    crit_rate: move_
-                        .meta
-                        .as_ref()
-                        .map(|meta| meta.crit_rate)
-                        .unwrap_or_default(),
-                }
+                get_move_execution(&move_),
             ),
             Default::default(),
         )
@@ -108,6 +100,12 @@ async fn get_move(index: i16, client: &pokerust::Client) {
                 accuracy: move_.accuracy,
                 priority: move_.priority,
                 target: target_from_id(move_.target.id()),
+                contact: false,
+                crit_rate: move_
+                    .meta
+                    .as_ref()
+                    .map(|meta| meta.crit_rate)
+                    .unwrap_or_default(),
                 world: is_world_move(&move_),
             },
             Default::default(),
@@ -136,9 +134,9 @@ fn category_from_id(id: i16) -> MoveCategory {
     }
 }
 
-fn get_move_usage(move_: &pokerust::Move) -> MoveExecution {
+fn get_move_execution(move_: &pokerust::Move) -> MoveExecution {
     match move_.name.as_str() {
-        "false-swipe" => MoveExecution::Script(move_.name.parse().unwrap()),
+        "false-swipe" => MoveExecution::Script,
         _ => {
             let actions = get_move_actions(move_);
             match actions.is_empty() {
@@ -149,11 +147,11 @@ fn get_move_usage(move_: &pokerust::Move) -> MoveExecution {
     }
 }
 
-fn get_move_actions(move_: &pokerust::Move) -> Vec<MoveAction> {
+fn get_move_actions(move_: &pokerust::Move) -> Vec<MoveUse> {
     let mut usages = Vec::with_capacity(1);
 
     if let Some(power) = move_.power {
-        usages.push(MoveAction::Damage(DamageKind::Power(power)))
+        usages.push(MoveUse::Damage(DamageKind::Power(power)))
     }
 
     // metadata
@@ -162,19 +160,19 @@ fn get_move_actions(move_: &pokerust::Move) -> Vec<MoveAction> {
         // flinch check
 
         if metadata.flinch_chance != 0 {
-            let flinch = vec![MoveAction::Flinch];
+            let flinch = vec![MoveUse::Flinch];
             usages.push(if metadata.flinch_chance == 100 {
-                MoveAction::Flinch
+                MoveUse::Flinch
             } else {
-                MoveAction::Chance(flinch, metadata.flinch_chance)
+                MoveUse::Chance(flinch, metadata.flinch_chance)
             });
         }
 
         // drain check
 
         if metadata.drain != 0 {
-            if let Some(MoveAction::Damage(kind)) = usages.get(0) {
-                usages[0] = MoveAction::Drain(*kind, metadata.drain);
+            if let Some(MoveUse::Damage(kind)) = usages.get(0) {
+                usages[0] = MoveUse::Drain(*kind, metadata.drain);
             }
         }
 
@@ -194,7 +192,7 @@ fn get_move_actions(move_: &pokerust::Move) -> Vec<MoveAction> {
                     None
                 }
             } {
-                usages.push(MoveAction::Ailment(ailment, range, metadata.ailment_chance));
+                usages.push(MoveUse::Ailment(ailment, range, metadata.ailment_chance));
             }
         }
 
@@ -202,13 +200,13 @@ fn get_move_actions(move_: &pokerust::Move) -> Vec<MoveAction> {
 
         if !move_.stat_changes.is_empty() {
             let stat_changes = move_.stat_changes.iter().map(|stat| {
-                MoveAction::Stat(get_stat_type(stat.stat.id(), &move_.name), stat.change)
+                MoveUse::Stat(get_stat_type(stat.stat.id(), &move_.name), stat.change)
             });
 
             if matches!(metadata.stat_chance, 0 | 100) {
                 usages.extend(stat_changes);
             } else {
-                usages.push(MoveAction::Chance(
+                usages.push(MoveUse::Chance(
                     stat_changes.collect(),
                     metadata.stat_chance,
                 ));
@@ -217,7 +215,7 @@ fn get_move_actions(move_: &pokerust::Move) -> Vec<MoveAction> {
     }
 
     // if usages.is_empty() {
-    //     usages.push(MoveAction::Todo)
+    //     usages.push(MoveUse::Todo)
     // }
 
     usages
