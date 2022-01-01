@@ -4,7 +4,6 @@
 #[macro_export]
 macro_rules! set_endpoint {
     { $A:ty, $B:tt, $C:literal } => {
-#[async_trait::async_trait]
 impl crate::Endpoint for $A {
     type ResourceListKind = $B<$A>;
 

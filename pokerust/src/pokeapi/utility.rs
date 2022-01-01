@@ -49,8 +49,8 @@ impl<T> APIResource<T>
 where
     T: DeserializeOwned,
 {
-    pub async fn get(&self, client: &crate::Client) -> Result<T, reqwest::Error> {
-        client.get_api_loc(&self.url).await
+    pub fn get(&self, client: &crate::Client) -> Result<T, attohttpc::Error> {
+        client.get_api_loc(&self.url)
     }
 }
 
@@ -151,8 +151,8 @@ impl<T> NamedAPIResource<T>
 where
     T: DeserializeOwned,
 {
-    pub async fn get(&self, client: &crate::Client) -> Result<T, reqwest::Error> {
-        client.get_api_loc(&self.url).await
+    pub fn get(&self, client: &crate::Client) -> Result<T, attohttpc::Error> {
+        client.get_api_loc(&self.url)
     }
 }
 

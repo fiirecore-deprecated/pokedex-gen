@@ -14,6 +14,5 @@ license = "BSD-3-Clause"
 include = ["Cargo.toml", "src/**/*.rs", "README.md", "LICENSE"]
 
 [dependencies]
-reqwest = { version = "0.11", features = ["json"] }
-async-trait = "0.1"
-serde = { version = "1.0", features = ["derive"] }
+attohttpc = { version = "0.18", features = ["json"] }
+serde = { version = "1", features = ["derive"] }

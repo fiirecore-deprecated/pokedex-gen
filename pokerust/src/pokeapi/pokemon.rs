@@ -210,8 +210,8 @@ pub struct Pokemon {
 
 impl Pokemon {
     /// Fetch list of `LocationAreaEncounters` from the API for this Pokemon.
-    pub async fn get_encounters(&self, client: &crate::Client) -> Result<Vec<LocationAreaEncounter>, reqwest::Error> {
-        client.get_api_loc(&self.location_area_encounters).await
+    pub fn get_encounters(&self, client: &crate::Client) -> Result<Vec<LocationAreaEncounter>, attohttpc::Error> {
+        client.get_api_loc(&self.location_area_encounters)
     }
 }
 

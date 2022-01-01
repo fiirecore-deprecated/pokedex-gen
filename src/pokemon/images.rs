@@ -1,20 +1,29 @@
-use anyhow::Result;
-use std::path::Path;
-use image::DynamicImage;
-use image::GenericImageView;
-use image::Pixel;
-use tokio::task::block_in_place;
+use std::sync::Arc;
 
-pub async fn download(folder: &Path, pokemon: &str, side: &str) -> Result<()> {
-    let response = reqwest::get(&format!("https://raw.githubusercontent.com/pret/pokefirered/master/graphics/pokemon/{}/{}.png", pokemon, side)).await?;
-    let bytes = response.bytes().await?;
-    block_in_place(move || {
-        let mut image = image::load_from_memory_with_format(&bytes, image::ImageFormat::Png).unwrap_or_else(|err| panic!("Could not get {} image for {} with error {}", side, pokemon, err));
-        let (top, bottom) = get_heights(&image);
-        image = image.crop(0, top, image.width(), bottom - top + 1);
-        image.save(folder.join(format!("{}.png", side))).unwrap();
-    });
-    Ok(())
+use image::{DynamicImage, GenericImageView, Pixel};
+
+pub fn download(pokemon: Arc<String>, side: &str) -> Vec<u8> {
+    let pokemon = if &**pokemon == "castform" && side != super::ICON {
+        Arc::new("castform/normal".to_owned())
+    } else {
+        pokemon
+    };
+    let response = attohttpc::get(&format!(
+        "https://raw.githubusercontent.com/pret/pokefirered/master/graphics/pokemon/{}/{}.png",
+        pokemon, side
+    )).send()
+    .unwrap_or_else(|err| panic!("Cannot get icon with error {}", err));
+    let bytes = response.bytes().unwrap();
+    let mut image = image::load_from_memory_with_format(&bytes, image::ImageFormat::Png)
+        .unwrap_or_else(|err| {
+            panic!(
+                "Could not get {} image for {} with error {}",
+                side, pokemon, err
+            )
+        });
+    let (top, bottom) = get_heights(&image);
+    image = image.crop(0, top, image.width(), bottom - top + 1);
+    image.into_rgba8().into_raw()
 }
 
 fn get_heights(image: &DynamicImage) -> (u32, u32) {
@@ -36,7 +45,6 @@ fn get_heights(image: &DynamicImage) -> (u32, u32) {
     }
 
     (top, bottom)
-
 }
 
 fn transparent_row(image: &DynamicImage, y: u32) -> bool {

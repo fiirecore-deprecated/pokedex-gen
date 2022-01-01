@@ -1,17 +1,41 @@
-use std::{path::PathBuf, process::Stdio};
+use std::sync::Arc;
 
-use tokio::process::Command;
+use std::fs;
 
-pub async fn get_cry(folder: &PathBuf, pokemon: &str) {
-    let response = reqwest::get(&format!("https://raw.githubusercontent.com/pret/pokefirered/master/sound/direct_sound_samples/cry_{}.aif", pokemon)).await.unwrap_or_else(|err| panic!("Could not get web response for cry of {}. Error: {}", pokemon, err));
-    let bytes = response.bytes().await.unwrap_or_else(|err| panic!("Could not get cry bytes for {} with error {}", pokemon, err));
-    let folder = folder.to_string_lossy();
-    let temp_cry = format!("{}/temp_cry.aif", folder);
-    let cry = format!("{}/cry.ogg", folder);
-    tokio::fs::write(&temp_cry, &bytes).await.unwrap_or_else(|err| panic!("Could not write temporary cry file at {:?} for {} with error {}", pokemon, &temp_cry, err));
-    let mut command = Command::new(super::FFMPEG_PATH);
-    command.stdout(Stdio::null()).kill_on_drop(true);
+use std::process;
+
+use std::process::Stdio;
+
+use tempfile::TempDir;
+
+pub fn get_cry(tempdir: Arc<TempDir>, pokemon: Arc<String>) -> Vec<u8> {
+    let pokemon = if &**pokemon == "unown/e" {
+        Arc::new("unown".to_string())
+    } else {
+        pokemon
+    };
+    let response = attohttpc::get(&format!("https://raw.githubusercontent.com/pret/pokefirered/master/sound/direct_sound_samples/cry_{}.aif", pokemon)).send().unwrap_or_else(|err| panic!("Could not get web response for cry of {}. Error: {}", pokemon, err));
+    let bytes = response
+        .bytes()
+        .unwrap_or_else(|err| panic!("Could not get cry bytes for {} with error {}", pokemon, err));
+    let temp_path = tempdir.path();
+    let temp_cry = temp_path.join(format!("{}-temp_cry.aif", pokemon));
+    let cry = temp_path.join(format!("{}-cry.ogg", pokemon));
+    fs::write(&temp_cry, &bytes).unwrap_or_else(|err| {
+        panic!(
+            "Could not write temporary cry file at {:?} for {} with error {}",
+            &temp_cry, pokemon, err
+        )
+    });
+    let mut command = process::Command::new(super::FFMPEG_PATH);
+    command.stdout(Stdio::null()); //.kill_on_drop(true);
     command.arg("-i").arg(&temp_cry).arg(&cry);
-    command.output().await.unwrap_or_else(|err| panic!("Could not execute ffmpeg for {} with error {}", pokemon, err));
-    tokio::fs::remove_file(&temp_cry).await.unwrap_or_else(|err| panic!("Could not remove temporary cry file for {} with error {}", pokemon, err));
+    command.output().unwrap_or_else(|err| {
+        panic!(
+            "Could not execute ffmpeg for {} with error {}",
+            pokemon, err
+        )
+    });
+    fs::read(cry)
+        .unwrap_or_else(|err| panic!("Could not read cry file for {} with error {}", pokemon, err))
 }

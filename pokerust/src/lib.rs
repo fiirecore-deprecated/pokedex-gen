@@ -69,7 +69,6 @@
 
 use serde::{de::DeserializeOwned, Serialize};
 
-mod cache;
 mod client;
 mod pokeapi;
 mod util;

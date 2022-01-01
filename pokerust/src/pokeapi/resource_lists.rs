@@ -1,4 +1,3 @@
-use async_trait::async_trait;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
@@ -27,7 +26,6 @@ pub struct NamedAPIResourceList<T> {
 }
 
 /// Trait for lists of `(Named)APIResources`
-#[async_trait]
 pub trait List
 where
     Self: Sized,
@@ -36,10 +34,10 @@ where
     fn count(&self) -> &u64;
 
     /// Get the next list
-    async fn next_list(&self, client: &crate::Client) -> Result<Option<Self>, reqwest::Error>;
+    fn next_list(&self, client: &crate::Client) -> Result<Option<Self>, attohttpc::Error>;
 
     /// Get the previous list
-    async fn previous_list(&self, client: &crate::Client) -> Result<Option<Self>, reqwest::Error>;
+    fn previous_list(&self, client: &crate::Client) -> Result<Option<Self>, attohttpc::Error>;
 }
 
 // impl<T> List for NamedAPIResourceList<T>
@@ -71,7 +69,6 @@ where
 
 macro_rules! impl_list {
     { $A:tt } => {
-#[async_trait]
 impl<T> List for $A<T>
 where
     T: DeserializeOwned,
@@ -80,18 +77,18 @@ where
         &self.count
     }
 
-    async fn next_list(&self, client: &crate::Client) -> Result<Option<Self>, reqwest::Error> {
+    fn next_list(&self, client: &crate::Client) -> Result<Option<Self>, attohttpc::Error> {
         if let Some(loc) = &self.next {
-            let list = client.get_api_loc(loc).await?;
+            let list = client.get_api_loc(loc)?;
             Ok(Some(list))
         } else {
             Ok(None)
         }
     }
 
-    async fn previous_list(&self, client: &crate::Client) -> Result<Option<Self>, reqwest::Error> {
+    fn previous_list(&self, client: &crate::Client) -> Result<Option<Self>, attohttpc::Error> {
         if let Some(loc) = &self.next {
-            let list = client.get_api_loc(loc).await?;
+            let list = client.get_api_loc(loc)?;
             Ok(Some(list))
         } else {
             Ok(None)
