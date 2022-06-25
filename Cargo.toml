@@ -1,7 +1,7 @@
 [package]
 name = "firecore-dex-gen"
 version = "0.0.1"
-authors = ["Rhys Holloway <rhyswilliamholloway@gmail.com>"]
+authors = ["Rhys H <donotdoughnut99@gmail.com>"]
 edition = "2021"
 
 [profile.dev.package."*"]
@@ -12,23 +12,21 @@ codegen-units = 1
 lto = true
 opt-level = 3
 
-[features]
-default = []
-
 [dependencies]
-firecore-pokedex-engine-builder = { git = "https://github.com/fiirecore-game/engine", rev = "647676a", package = "firecore-pokedex-engine-builder" }
 pokerust = { path = "./pokerust" }
-attohttpc = { version = "0.18", features = ["json"] }
+attohttpc = { version = "0.19", features = ["json"] }
 serde = { version = "1", features = ["derive"] }
-image = { version = "0.23", default-features = false, features = ["png"] }
+image = { version = "0.24", default-features = false, features = ["png"] }
 tempfile = "3"
 rayon = "1"
-firecore-battle = { version = "0.0.8", git = "https://github.com/fiirecore/battle", rev = "621352f", default-features = false, features = ["default_engine"] }
-hashbrown = { version = "0.9", features = ["rayon", "serde"] }
+firecore-battle = { version = "0.0.9", git = "https://github.com/fiirecore/battle", rev = "6ce5d00", default-features = false, features = [
+    "default_engine",
+] }
+hashbrown = { version = "0.12", features = ["rayon", "serde"] }
+enum-map = { version = "2.0", features = ["serde"] }
 
 [dev-dependencies]
 ron = "0.7"
 
 [workspace]
 members = ["pokerust"]
-default-members = ["pokerust"]

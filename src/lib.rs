@@ -4,7 +4,6 @@ extern crate firecore_battle as battle;
 use std::sync::Arc;
 
 use battle::pokedex::{moves::Move, pokemon::Pokemon, types::PokemonType, item::Item};
-use firecore_pokedex_engine_builder::pokemon::PokemonOutput;
 use moves::Execution;
 use serde::{Deserialize, Serialize};
 
@@ -24,7 +23,7 @@ pub struct DexGenerator {
 #[derive(Debug, Deserialize, Serialize)]
 pub struct GeneratedPokemon {
     pub pokemon: Vec<Pokemon>,
-    pub ui_data: PokemonOutput,
+    pub ui_data: pokemon::PokemonOutput,
 }
 
 #[derive(Debug, Deserialize, Serialize)]

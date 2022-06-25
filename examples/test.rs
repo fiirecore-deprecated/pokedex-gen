@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use firecore_pokedex_engine_builder::pokemon::PokemonTexture;
+use firecore_battle::pokedex::pokemon::PokemonTexture;
 use ron::ser::PrettyConfig;
 
 fn main() {

@@ -1,16 +1,24 @@
-use battle::pokedex::pokemon::{
-    data::{Breeding, GrowthRate, LearnableMove, Training},
-    stat::StatSet,
-    Pokemon,
+use battle::pokedex::{
+    pokemon::{
+        data::{Breeding, GrowthRate, LearnableMove, Training},
+        stat::{StatSet, StatType},
+        Pokemon, PokemonTexture, PokemonId
+    },
+    types::Types,
 };
-use firecore_pokedex_engine_builder::{enum_map::EnumMap, pokemon::{SerializedPokemon, PokemonOutput}};
+
+use enum_map::{EnumMap, enum_map};
 use pokerust::Id;
+use hashbrown::HashMap;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use std::path::Path;
 use std::sync::Arc;
 use tempfile::TempDir;
 
 use crate::capitalize_first;
+
+pub type SerializedPokemon = (EnumMap<PokemonTexture, Vec<u8>>, Vec<u8>);
+pub type PokemonOutput = HashMap<PokemonId, SerializedPokemon>;
 
 mod cry;
 mod images;
@@ -87,14 +95,21 @@ fn get_pokemon(
 
     let nc = name_counted.clone();
 
-    let cry = std::thread::spawn(move || enable_cry.then(|| cry::get_cry(tempdir, nc)).unwrap_or_default());
+    let cry = std::thread::spawn(move || {
+        enable_cry
+            .then(|| cry::get_cry(tempdir, nc))
+            .unwrap_or_default()
+    });
 
-    let mut textures = [FRONT, BACK, ICON].into_par_iter().map(move |side| download(name_counted.clone(), side)).collect::<Vec<_>>();
+    let mut textures = [FRONT, BACK, ICON]
+        .into_par_iter()
+        .map(move |side| download(name_counted.clone(), side))
+        .collect::<Vec<_>>();
 
     // let after_move_check = start.elapsed().as_micros();
 
-    let primary_type = crate::type_from_id(pokemon.types[0].type_.id());
-    let secondary_type = if pokemon.types.len() == 2 {
+    let primary = crate::type_from_id(pokemon.types[0].type_.id());
+    let secondary = if pokemon.types.len() == 2 {
         Some(crate::type_from_id(pokemon.types[1].type_.id()))
     } else {
         None
@@ -135,17 +150,16 @@ fn get_pokemon(
         Pokemon {
             id: pokemon.id as u16,
             name,
-            primary_type,
-            secondary_type,
+            types: Types { primary, secondary },
             moves,
-            base: StatSet {
-                hp: stats[0].base_stat,
-                atk: stats[1].base_stat,
-                def: stats[2].base_stat,
-                sp_atk: stats[3].base_stat,
-                sp_def: stats[4].base_stat,
-                speed: stats[5].base_stat,
-            },
+            base: StatSet(enum_map! {
+                StatType::Health => stats[0].base_stat,
+                StatType::Attack => stats[1].base_stat,
+                StatType::Defense => stats[2].base_stat,
+                StatType::SpAttack => stats[3].base_stat,
+                StatType::SpDefense => stats[4].base_stat,
+                StatType::Speed => stats[5].base_stat,
+            }),
             species: genus,
             evolution: None,
             height: pokemon.height,
